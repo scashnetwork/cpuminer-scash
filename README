@@ -1,15 +1,16 @@
-This is a multi-threaded CPU miner for Litecoin and Bitcoin,
+This is a multi-threaded CPU miner for Scash, based on pooler's
 fork of Jeff Garzik's reference cpuminer.
 
 License: GPLv2.  See COPYING for details.
 
-Downloads:  https://sourceforge.net/projects/cpuminer/files/
-Git tree:   https://github.com/pooler/cpuminer
+Git tree:   https://github.com/scash-project/cpuminer-scash
 
 Dependencies:
 	libcurl			http://curl.haxx.se/libcurl/
 	jansson			http://www.digip.org/jansson/
 		(jansson is included in-tree)
+	RandomX			https://github.com/scash-project/RandomX
+		(RandomX is included as a Git submodule)
 
 Basic *nix build instructions:
 	./autogen.sh	# only needed if building from git repo

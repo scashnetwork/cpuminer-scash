@@ -1,3 +1,7 @@
+Version 3.0.0 - Feb 17, 2024
+
+- Add support for Scash RandomX
+
 Version 2.5.1 - Jun 25, 2020
 
 - Add support for bech32 addresses (BIP 173)
