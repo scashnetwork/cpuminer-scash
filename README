@@ -10,7 +10,7 @@ Dependencies:
 	jansson			http://www.digip.org/jansson/
 		(jansson is included in-tree)
 	RandomX			https://github.com/scash-project/RandomX
-		(RandomX is included as a Git submodule)
+		(RandomX is included as a Git submodule: git clone --recursive)
 
 Basic *nix build instructions:
 	./autogen.sh	# only needed if building from git repo
