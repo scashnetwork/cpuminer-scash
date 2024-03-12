@@ -10,9 +10,16 @@ Dependencies:
 	jansson			http://www.digip.org/jansson/
 		(jansson is included in-tree)
 	RandomX			https://github.com/scash-project/RandomX
-		(RandomX is included as a Git submodule: git clone --recursive)
+		(RandomX is included as a Git submodule)
+
+Basic *nix dependencies:
+	sudo apt update
+	sudo apt upgrade
+	sudo apt install autoconf pkg-config g++ make libcurl4-openssl-dev
 
 Basic *nix build instructions:
+	git clone https://github.com/scash-project/cpuminer-scash --recursive
+	cd cpuminer-scash
 	./autogen.sh	# only needed if building from git repo
 	./nomacro.pl	# in case the assembler doesn't support macros
 	./configure CFLAGS="-O3" # make sure -O3 is an O and not a zero!
