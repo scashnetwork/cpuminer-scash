@@ -40,7 +40,7 @@ int scanhash_randomx(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
 
         randomx_calculate_commitment((void *)blockHeader, sizeof(blockHeader), &rx_hash, &rx_cm);
 
-        if (((const u_int32_t *)rx_cm)[7] < Htarg)
+        if (((const uint32_t *)rx_cm)[7] < Htarg)
         {
             if (fulltest((void *)rx_cm, ptarget))
             {
