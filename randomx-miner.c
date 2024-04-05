@@ -18,8 +18,7 @@ int scanhash_randomx(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
                      uint32_t max_nonce, randomx_vm *vm, unsigned long *hashes_done, uint8_t *out_rx_hash)
 {
     const uint32_t Htarg = ptarget[7];
-    const uint32_t first_nonce = pdata[19];
-    uint32_t n = first_nonce;
+    uint32_t n = pdata[19];
     uint8_t rx_hash[RANDOMX_HASH_SIZE];
     uint8_t rx_cm[RANDOMX_HASH_SIZE];
 
@@ -44,13 +43,13 @@ int scanhash_randomx(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
         {
             if (fulltest((void *)rx_cm, ptarget))
             {
+                *hashes_done = n - pdata[19] + 1;
+
                 // Note: Encode nonce into buffer as big endian, so it gets flipped back to little endian when submitting to node
                 be32enc((void *)&pdata[19], n);
 
                 // rx_hash is already in little endian order for uint256, so just copy it into block header for submission
                 memcpy(out_rx_hash, rx_hash, RANDOMX_HASH_SIZE);
-
-                *hashes_done = n - first_nonce + 1;
 
                 return 1;
             }
@@ -60,5 +59,7 @@ int scanhash_randomx(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
 
     } while (n < max_nonce && !work_restart[thr_id].restart);
 
+    *hashes_done = n - pdata[19] + 1;
+    pdata[19] = n;
     return 0;
 }
