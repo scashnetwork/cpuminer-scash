@@ -1,0 +1,4 @@
+[submodule "RandomX"]
+	path = RandomX
+	url = https://github.com/scash-project/RandomX.git
+	branch = scash

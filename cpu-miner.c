@@ -1,6 +1,7 @@
 /*
  * Copyright 2010 Jeff Garzik
  * Copyright 2012-2017 pooler
+ * Copyright 2024 Simon Liu
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -37,6 +38,8 @@
 #include <curl/curl.h>
 #include "compat.h"
 #include "miner.h"
+
+#include "RandomX/src/randomx.h"
 
 #define PROGRAM_NAME		"minerd"
 #define LP_SCANTIME		60
@@ -103,11 +106,13 @@ struct workio_cmd {
 enum algos {
 	ALGO_SCRYPT,		/* scrypt(1024,1,1) */
 	ALGO_SHA256D,		/* SHA-256d */
+	ALGO_RANDOMX,		/* RandomX */
 };
 
 static const char *algo_names[] = {
 	[ALGO_SCRYPT]		= "scrypt",
 	[ALGO_SHA256D]		= "sha256d",
+	[ALGO_RANDOMX]		= "randomx",
 };
 
 bool opt_debug = false;
@@ -127,7 +132,7 @@ static int opt_retries = -1;
 static int opt_fail_pause = 30;
 int opt_timeout = 0;
 static int opt_scantime = 5;
-static enum algos opt_algo = ALGO_SCRYPT;
+static enum algos opt_algo = ALGO_RANDOMX;
 static int opt_scrypt_n = 1024;
 static int opt_n_threads;
 static int num_processors;
@@ -169,9 +174,7 @@ static char const usage[] = "\
 Usage: " PROGRAM_NAME " [OPTIONS]\n\
 Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
-                          scrypt    scrypt(1024, 1, 1) (default)\n\
-                          scrypt:N  scrypt(N, 1, 1)\n\
-                          sha256d   SHA-256d\n\
+                          randomx   RandomX (default)\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -266,6 +269,9 @@ struct work {
 	char *job_id;
 	size_t xnonce2_len;
 	unsigned char *xnonce2;
+
+	uint8_t randomx_seed_hash[32];
+	uint8_t rx_hash[RANDOMX_HASH_SIZE];	// rx hash is part of block header
 };
 
 static struct work g_work;
@@ -296,6 +302,8 @@ static inline void work_copy(struct work *dest, const struct work *src)
 		memcpy(dest->xnonce2, src->xnonce2, src->xnonce2_len);
 	}
 }
+
+static void restart_threads(); // forward declaration
 
 static bool jobj_binary(const json_t *obj, const char *key,
 			void *buf, size_t buflen)
@@ -360,6 +368,7 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 	bool segwit = false;
 	json_t *tmp, *txa;
 	bool rc = false;
+	uint32_t epochDuration;	// !RandomX
 
 	tmp = json_object_get(val, "rules");
 	if (tmp && json_is_array(tmp)) {
@@ -405,6 +414,15 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		applog(LOG_ERR, "JSON invalid previousblockhash");
 		goto out;
 	}
+
+	// !RandomX
+	tmp = json_object_get(val, "rx_epoch_duration");
+	if (!tmp || !json_is_integer(tmp)) {
+		applog(LOG_ERR, "JSON invalid rx_epoch_duration");
+		goto out;
+	}
+	epochDuration = json_integer_value(tmp);
+	// !RandomX END
 
 	tmp = json_object_get(val, "curtime");
 	if (!tmp || !json_is_integer(tmp)) {
@@ -634,6 +652,15 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 	for (i = 0; i < 8; i++)
 		work->data[9 + i] = be32dec((uint32_t *)merkle_tree[0] + i);
 	work->data[17] = swab32(curtime);
+
+	// !RandomX
+	char epochSeedString[100];
+	memset(epochSeedString, 0, sizeof(epochSeedString));
+	uint32_t nEpoch = curtime/epochDuration;
+	sprintf(epochSeedString, "Scash/RandomX/Epoch/%d", nEpoch);
+	sha256d(work->randomx_seed_hash, epochSeedString, strlen(epochSeedString));
+	// !RandomX END
+
 	work->data[18] = le32dec(&bits);
 	memset(work->data + 19, 0x00, 52);
 	work->data[20] = 0x80000000;
@@ -744,7 +771,14 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 
 		for (i = 0; i < ARRAY_SIZE(work->data); i++)
 			be32enc(work->data + i, work->data[i]);
-		bin2hex(data_str, (unsigned char *)work->data, 80);
+
+		// !RANDOMX
+		// copy rx hash into data buffer, already in required little endian format
+		unsigned char *hashPtr = ((unsigned char *)work->data) + 80;
+		memcpy(hashPtr, work->rx_hash, 32);
+		bin2hex(data_str, (unsigned char *)work->data, 80 + RANDOMX_HASH_SIZE);
+		// !RANDOMX
+
 		if (work->workid) {
 			char *params;
 			val = json_object();
@@ -985,6 +1019,12 @@ static void *workio_thread(void *userdata)
 			break;
 		case WC_SUBMIT_WORK:
 			ok = workio_submit_work(wc, curl);
+
+			// Restart mining threads when using GBT without longpoll, to interrupt existing scans.
+			if (ok && !have_longpoll) {
+				restart_threads();
+			}
+
 			break;
 
 		default:		/* should never happen */
@@ -1131,6 +1171,12 @@ static void *miner_thread(void *userdata)
 	char s[16];
 	int i;
 
+	// The RandomX VM for the thread
+	randomx_vm *rx_vm = NULL;
+	randomx_cache *rx_cache = NULL;
+	randomx_dataset *rx_dataset = NULL;
+	unsigned char rx_current_key[32] = {0};
+
 	/* Set worker threads to nice 19 and then preferentially to SCHED_IDLE
 	 * and if that fails, then SCHED_BATCH. No need for this to be an
 	 * error if it fails */
@@ -1214,15 +1260,81 @@ static void *miner_thread(void *userdata)
 			case ALGO_SHA256D:
 				max64 = 0x1fffff;
 				break;
+			case ALGO_RANDOMX:
+				max64 = 0x1fffff;
+				break;
 			}
 		}
+
+		// Number of RandomX hashes to benchmark
+		if (opt_benchmark && ALGO_RANDOMX==opt_algo) {
+			max64 = 20000;
+		}
+
 		if (work.data[19] + max64 > end_nonce)
 			max_nonce = end_nonce;
 		else
 			max_nonce = work.data[19] + max64;
 		
 		hashes_done = 0;
-		gettimeofday(&tv_start, NULL);
+
+		// Set up randomx vm, reinitialize if the key changes
+		if (ALGO_RANDOMX == opt_algo) {
+
+			// Benchmarking requires a key to be set manually
+			if (opt_benchmark) {
+				const char *epochSeedString = "Scash/RandomX/Epoch/2825";
+				sha256d(work.randomx_seed_hash, epochSeedString, strlen(epochSeedString));
+			}
+
+			if (memcmp(rx_current_key, work.randomx_seed_hash, 32) != 0) {
+				memcpy(rx_current_key, work.randomx_seed_hash, 32);
+
+				// destroy and release old vm
+				if (rx_vm)
+					randomx_destroy_vm(rx_vm);
+				if (rx_dataset)
+					randomx_release_dataset(rx_dataset);
+				if (rx_cache)
+					randomx_release_cache(rx_cache);
+				rx_vm = NULL;
+				rx_cache = NULL;
+				rx_dataset = NULL;
+				if (opt_debug) {
+					char *s = abin2hex((unsigned char *)rx_current_key, 32);
+					applog(LOG_DEBUG, "DEBUG: creating new VM for new randomx key = %s", s);
+					free(s);
+				}
+
+				randomx_flags flags = randomx_get_flags();
+				flags |= RANDOMX_FLAG_FULL_MEM;
+
+				rx_cache = randomx_alloc_cache(flags);
+				if (!rx_cache) {
+					applog(LOG_ERR, "randomx_alloc_cache() failed, exiting mining thread %d", mythr->id);
+					goto out;
+				}
+				randomx_init_cache(rx_cache, rx_current_key, 32);
+
+				rx_dataset = randomx_alloc_dataset(flags);
+				if (!rx_dataset) {
+					applog(LOG_ERR, "randomx_alloc_dataset() failed, exiting mining thread %d", mythr->id);
+					goto out;
+				}
+				unsigned long datasetItemCount = randomx_dataset_item_count();
+				randomx_init_dataset(rx_dataset, rx_cache, 0, datasetItemCount);
+				randomx_release_cache(rx_cache);
+				rx_cache = NULL;
+
+				rx_vm  = randomx_create_vm(flags, NULL, rx_dataset);
+				if (!rx_dataset) {
+					applog(LOG_ERR, "randomx_create_vm() failed, exiting mining thread %d", mythr->id);
+					goto out;
+				}
+			}
+		}
+
+		gettimeofday(&tv_start, NULL);	// start timing after any VM generation
 
 		/* scan nonces for a proof-of-work hash */
 		switch (opt_algo) {
@@ -1234,6 +1346,11 @@ static void *miner_thread(void *userdata)
 		case ALGO_SHA256D:
 			rc = scanhash_sha256d(thr_id, work.data, work.target,
 			                      max_nonce, &hashes_done);
+			break;
+
+		case ALGO_RANDOMX:
+			rc = scanhash_randomx(thr_id, work.data, work.target,
+			                      max_nonce, rx_vm, &hashes_done, work.rx_hash);
 			break;
 
 		default:
@@ -1273,6 +1390,16 @@ static void *miner_thread(void *userdata)
 
 out:
 	tq_freeze(mythr->q);
+
+	if (ALGO_RANDOMX == opt_algo)
+	{
+		if (rx_vm)
+			randomx_destroy_vm(rx_vm);
+		if (rx_dataset)
+			randomx_release_dataset(rx_dataset);
+		if (rx_cache)
+			randomx_release_cache(rx_cache);
+	}
 
 	return NULL;
 }
@@ -1861,6 +1988,8 @@ static void signal_handler(int sig)
 	}
 }
 #endif
+
+
 
 int main(int argc, char *argv[])
 {

@@ -26,3 +26,6 @@ config.sub
 
 mingw32-config.cache
 
+.vscode
+*.orig
+

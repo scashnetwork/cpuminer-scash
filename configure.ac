@@ -1,23 +1,22 @@
-AC_INIT([cpuminer], [2.5.1])
+AC_INIT([cpuminer],[3.0.3])
 
 AC_PREREQ([2.59c])
-AC_CANONICAL_SYSTEM
+AC_CANONICAL_TARGET
 AC_CONFIG_SRCDIR([cpu-miner.c])
-AM_INIT_AUTOMAKE([gnu])
+AM_INIT_AUTOMAKE([gnu foreign subdir-objects])
 AC_CONFIG_HEADERS([cpuminer-config.h])
 
 dnl Make sure anyone changing configure.ac/Makefile.am has a clue
 AM_MAINTAINER_MODE
 
 dnl Checks for programs
-AC_PROG_CC_C99
-AC_PROG_GCC_TRADITIONAL
+AC_PROG_CC
 AM_PROG_CC_C_O
 AM_PROG_AS
 AC_PROG_RANLIB
+AC_PROG_CXX
 
 dnl Checks for header files
-AC_HEADER_STDC
 AC_CHECK_HEADERS([sys/endian.h sys/param.h syslog.h])
 # sys/sysctl.h requires sys/types.h on FreeBSD
 # sys/sysctl.h requires sys/param.h on OpenBSD

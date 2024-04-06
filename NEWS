@@ -1,3 +1,20 @@
+Version 3.0.3 - Apr 5, 2024
+
+- Fix benchmarking
+
+Version 3.0.2 - Apr 4, 2024
+
+- Fix hash rate display
+
+Version 3.0.1 - Apr 1, 2024
+
+- Add instructions to build for Windows using MSYS2
+- Fix type to use stdint
+
+Version 3.0.0 - Feb 17, 2024
+
+- Add support for Scash RandomX
+
 Version 2.5.1 - Jun 25, 2020
 
 - Add support for bech32 addresses (BIP 173)
