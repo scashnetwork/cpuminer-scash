@@ -152,6 +152,11 @@ int stratum_thr_id = -1;
 struct work_restart *work_restart = NULL;
 static struct stratum_ctx stratum;
 
+// !RANDOMX
+pthread_mutex_t dataset_lock;
+pthread_barrier_t dataset_barrier;
+// !RANDOMX END
+
 pthread_mutex_t applog_lock;
 static pthread_mutex_t stats_lock;
 
@@ -1160,6 +1165,24 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		diff_to_target(work->target, sctx->job.diff);
 }
 
+// RandomX VM data structures shared by mining threads
+randomx_cache *rx_cache = NULL;
+randomx_dataset *rx_dataset = NULL;
+unsigned char rx_current_key[32] = {0};
+
+// RandomX dataset init thread function and args
+typedef struct rx_init_dataset_thrargs {
+	unsigned long start;
+	unsigned long count;
+} rx_init_dataset_thrargs_t;
+
+void *rx_init_dataset(void *args) {
+	rx_init_dataset_thrargs_t *thrargs = (rx_init_dataset_thrargs_t *)args;
+	randomx_init_dataset(rx_dataset, rx_cache, thrargs->start, thrargs->count);
+	pthread_exit(NULL);
+}
+
+
 static void *miner_thread(void *userdata)
 {
 	struct thr_info *mythr = userdata;
@@ -1171,11 +1194,8 @@ static void *miner_thread(void *userdata)
 	char s[16];
 	int i;
 
-	// The RandomX VM for the thread
+	// The local RandomX VM for the thread
 	randomx_vm *rx_vm = NULL;
-	randomx_cache *rx_cache = NULL;
-	randomx_dataset *rx_dataset = NULL;
-	unsigned char rx_current_key[32] = {0};
 
 	/* Set worker threads to nice 19 and then preferentially to SCHED_IDLE
 	 * and if that fails, then SCHED_BATCH. No need for this to be an
@@ -1285,49 +1305,99 @@ static void *miner_thread(void *userdata)
 			if (opt_benchmark) {
 				const char *epochSeedString = "Scash/RandomX/Epoch/2825";
 				sha256d(work.randomx_seed_hash, epochSeedString, strlen(epochSeedString));
+
+#if 0
+				// Simulate epoch change and new vm creation during benchmarking
+				static uint8_t counter = 0;
+				if (thr_id == 0) memset(rx_current_key, counter++, sizeof(rx_current_key));
+#endif
 			}
 
-			if (memcmp(rx_current_key, work.randomx_seed_hash, 32) != 0) {
-				memcpy(rx_current_key, work.randomx_seed_hash, 32);
+			static bool fCreateDataset;
 
-				// destroy and release old vm
+			if (memcmp(rx_current_key, work.randomx_seed_hash, 32) != 0) {
+
+				fCreateDataset = true;
+
+				// All mining threads wait at barrier
+				pthread_barrier_wait(&dataset_barrier);
+
+				// All mining threads can destroy vm safely here
 				if (rx_vm)
 					randomx_destroy_vm(rx_vm);
-				if (rx_dataset)
-					randomx_release_dataset(rx_dataset);
-				if (rx_cache)
-					randomx_release_cache(rx_cache);
 				rx_vm = NULL;
-				rx_cache = NULL;
-				rx_dataset = NULL;
-				if (opt_debug) {
-					char *s = abin2hex((unsigned char *)rx_current_key, 32);
-					applog(LOG_DEBUG, "DEBUG: creating new VM for new randomx key = %s", s);
-					free(s);
-				}
 
 				randomx_flags flags = randomx_get_flags();
 				flags |= RANDOMX_FLAG_FULL_MEM;
 
-				rx_cache = randomx_alloc_cache(flags);
-				if (!rx_cache) {
-					applog(LOG_ERR, "randomx_alloc_cache() failed, exiting mining thread %d", mythr->id);
-					goto out;
-				}
-				randomx_init_cache(rx_cache, rx_current_key, 32);
+				// First thread to grab mutex gets to create the new dataset
+ 				pthread_mutex_lock(&dataset_lock);
 
-				rx_dataset = randomx_alloc_dataset(flags);
-				if (!rx_dataset) {
-					applog(LOG_ERR, "randomx_alloc_dataset() failed, exiting mining thread %d", mythr->id);
-					goto out;
+				if (fCreateDataset) {
+					fCreateDataset = false;
+
+					if (rx_dataset)
+						randomx_release_dataset(rx_dataset);
+					if (rx_cache)
+						randomx_release_cache(rx_cache);
+					rx_cache = NULL;
+					rx_dataset = NULL;
+
+					memcpy(rx_current_key, work.randomx_seed_hash, 32);
+
+					if (opt_debug) {
+						char *s = abin2hex((unsigned char *)rx_current_key, 32);
+						applog(LOG_DEBUG, "DEBUG: creating randomx_dataset for key = %s", s);
+						free(s);
+					}
+
+					rx_cache = randomx_alloc_cache(flags);
+					if (!rx_cache) {
+						applog(LOG_ERR, "randomx_alloc_cache() failed, exiting mining thread %d", mythr->id);
+						goto out;
+					}
+					randomx_init_cache(rx_cache, rx_current_key, 32);
+
+					rx_dataset = randomx_alloc_dataset(flags);
+					if (!rx_dataset) {
+						applog(LOG_ERR, "randomx_alloc_dataset() failed, exiting mining thread %d", mythr->id);
+						goto out;
+					}
+					unsigned long datasetItemCount = randomx_dataset_item_count();
+
+					// Init randomx dataset using multiple threads
+					pthread_t thread[opt_n_threads];
+					rx_init_dataset_thrargs_t targs[opt_n_threads];
+
+					unsigned long itemChunkSize = datasetItemCount / opt_n_threads;
+
+					for (i = 0; i < opt_n_threads; i++) {
+						targs[i].start = i * itemChunkSize;
+						if (i == opt_n_threads - 1) {
+							targs[i].count = datasetItemCount - targs[i].start; // final chunk may have different count
+						} else {
+							targs[i].count = itemChunkSize;
+						}
+						applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						int ret = pthread_create(&thread[i], NULL, &rx_init_dataset, &targs[i]);
+						if(ret != 0) {
+							printf("Create pthread error!\n");
+							exit (1);
+						}
+					}
+
+					for (i = 0; i < opt_n_threads; i++) {
+						pthread_join(thread[i], NULL);
+					}
+					applog(LOG_DEBUG, "DEBUG: randomx_dataset initialized");
+
+					randomx_release_cache(rx_cache);
+					rx_cache = NULL;
 				}
-				unsigned long datasetItemCount = randomx_dataset_item_count();
-				randomx_init_dataset(rx_dataset, rx_cache, 0, datasetItemCount);
-				randomx_release_cache(rx_cache);
-				rx_cache = NULL;
+				pthread_mutex_unlock(&dataset_lock);
 
 				rx_vm  = randomx_create_vm(flags, NULL, rx_dataset);
-				if (!rx_dataset) {
+				if (!rx_vm) {
 					applog(LOG_ERR, "randomx_create_vm() failed, exiting mining thread %d", mythr->id);
 					goto out;
 				}
@@ -2015,6 +2085,9 @@ int main(int argc, char *argv[])
 		sprintf(rpc_userpass, "%s:%s", rpc_user, rpc_pass);
 	}
 
+	// !RANDOMX
+	pthread_mutex_init(&dataset_lock, NULL);
+	// !RANDOMX END
 	pthread_mutex_init(&applog_lock, NULL);
 	pthread_mutex_init(&stats_lock, NULL);
 	pthread_mutex_init(&g_work_lock, NULL);
@@ -2064,6 +2137,13 @@ int main(int argc, char *argv[])
 		num_processors = 1;
 	if (!opt_n_threads)
 		opt_n_threads = num_processors;
+
+	// !RANDOMX
+	// Initialization of pthread_barrier with N threads
+	if (pthread_barrier_init(&dataset_barrier, NULL, opt_n_threads) != 0) {
+		printf("pthread_barrier_init failed!\n");
+		exit(1);
+	}
 
 #ifdef HAVE_SYSLOG_H
 	if (use_syslog)
