@@ -1,3 +1,8 @@
+Version 3.0.4 - Apr 6, 2024
+
+- Reduce memory usage by sharing dataset across vms
+- Initialize dataset with multiple threads
+
 Version 3.0.3 - Apr 5, 2024
 
 - Fix benchmarking
