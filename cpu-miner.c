@@ -1146,6 +1146,16 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 	for (i = 0; i < 8; i++)
 		work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 	work->data[17] = le32dec(sctx->job.ntime);
+
+	// !RandomX
+	char epochSeedString[40];
+	memset(epochSeedString, 0, sizeof(epochSeedString));
+	uint32_t curtime = be32dec(&work->data[17]);
+	uint32_t nEpoch = curtime/(7 * 24 * 60 * 60);
+	sprintf(epochSeedString, "Scash/RandomX/Epoch/%d", nEpoch);
+	sha256d(work->randomx_seed_hash, epochSeedString, strlen(epochSeedString));
+	// !RandomX END
+
 	work->data[18] = le32dec(sctx->job.nbits);
 	work->data[20] = 0x80000000;
 	work->data[31] = 0x00000280;
