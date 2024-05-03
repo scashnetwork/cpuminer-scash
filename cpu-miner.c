@@ -1388,7 +1388,9 @@ static void *miner_thread(void *userdata)
 						} else {
 							targs[i].count = itemChunkSize;
 						}
-						applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						if (opt_debug) {
+							applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						}
 						int ret = pthread_create(&thread[i], NULL, &rx_init_dataset, &targs[i]);
 						if(ret != 0) {
 							printf("Create pthread error!\n");
@@ -1399,7 +1401,10 @@ static void *miner_thread(void *userdata)
 					for (i = 0; i < opt_n_threads; i++) {
 						pthread_join(thread[i], NULL);
 					}
-					applog(LOG_DEBUG, "DEBUG: randomx_dataset initialized");
+
+					if (opt_debug) {
+						applog(LOG_DEBUG, "DEBUG: randomx_dataset initialized");
+					}
 
 					randomx_release_cache(rx_cache);
 					rx_cache = NULL;
