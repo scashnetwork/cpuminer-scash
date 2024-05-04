@@ -30,16 +30,20 @@ int scanhash_randomx(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
         be32enc(blockHeader + i, pdata[i]);
     }
 
+    void *blockHeaderPtr = (void *)blockHeader;
+    void *noncePtr = &blockHeader[19];
+    const uint32_t *cmCheckPtr = &((const uint32_t *)&rx_cm)[7];
+
     do
     {
         // serialize the nonce into the blockheader in little endian
-        le32enc((void *)&blockHeader[19], n);
+        le32enc(noncePtr, n);
 
-        randomx_calculate_hash(vm, (void *)blockHeader, sizeof(blockHeader), &rx_hash);
+        randomx_calculate_hash(vm, blockHeaderPtr, sizeof(blockHeader), &rx_hash);
 
-        randomx_calculate_commitment((void *)blockHeader, sizeof(blockHeader), &rx_hash, &rx_cm);
+        randomx_calculate_commitment(blockHeaderPtr, sizeof(blockHeader), &rx_hash, &rx_cm);
 
-        if (((const uint32_t *)rx_cm)[7] < Htarg)
+        if (*cmCheckPtr < Htarg)
         {
             if (fulltest((void *)rx_cm, ptarget))
             {
