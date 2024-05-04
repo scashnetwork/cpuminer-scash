@@ -1,3 +1,9 @@
+Version 3.0.5 - May 3, 2024
+
+- Fix stratum support
+- Add option --largepages, to enable large pages
+- Add option --no-affinity, to disable thread binding
+
 Version 3.0.4 - Apr 6, 2024
 
 - Reduce memory usage by sharing dataset across vms
