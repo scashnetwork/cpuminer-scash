@@ -37,9 +37,25 @@ Help message and options:
 ```
 ./minerd -h
 ```
+
 Example usage to mine on 4 cpu threads:
 ```
 ./minerd -o 127.0.0.1:8342 -O username:password -t 4 --coinbase-addr=YOUR_SCASH_ADDRESS
+```
+
+Use large memory pages and disable thread binding:
+```
+./minerd -o 127.0.0.1:8342 -O username:password -t 4 --coinbase-addr=YOUR_SCASH_ADDRESS --largepages --no-affinity
+```
+
+Use with a Stratum v1 mining pool and print out any network and debugging messages:
+```
+./minerd --url=stratum+tcps://pool.domain.com:1234 --user=checkyourpool --pass=checkyourpool -P -D
+```
+
+Benchmark 20000 hashes, on each of 4 miner threads (by default, will try number of processors):
+```
+./minerd --benchmark -t 4
 ```
 
 ## Windows
@@ -73,6 +89,8 @@ make
 
 ### Running the miner
 
+Usage is same as shown above for Linux e.g.
+
 Help message and options:
 ```
 ./minerd.exe -h
@@ -81,11 +99,6 @@ Help message and options:
 Example usage to mine on 4 cpu threads:
 ```
 ./minerd.exe -o 127.0.0.1:8342 -O username:password -t 4 --coinbase-addr=YOUR_SCASH_ADDRESS
-```
-
-Benchmark 20000 hashes, on each of 4 miner threads (by default, will try number of processors):
-```
-./minerd --benchmark -t 4
 ```
 
 ## Legacy Readme
