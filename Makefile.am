@@ -44,6 +44,9 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  RandomX/src/vm_interpreted.cpp \
 		  RandomX/src/vm_interpreted_light.cpp
 		  
+# Build RandomX natively to enable hardware acceleration
+RANDOMX_FLAGS=-march=native -O3
+
 if USE_ASM
 if ARCH_x86
 minerd_SOURCES += sha2-x86.S scrypt-x86.S
@@ -61,5 +64,5 @@ endif
 minerd_LDFLAGS	= $(PTHREAD_FLAGS)
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
 minerd_CFLAGS	= -fno-strict-aliasing
-minerd_CPPFLAGS	= @LIBCURL_CPPFLAGS@ $(JANSSON_INCLUDES) $(PTHREAD_FLAGS)
+minerd_CPPFLAGS	= @LIBCURL_CPPFLAGS@ $(JANSSON_INCLUDES) $(PTHREAD_FLAGS) $(RANDOMX_FLAGS)
 

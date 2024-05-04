@@ -1,6 +1,7 @@
-Version 3.0.5 - May 3, 2024
+Version 3.0.5 - May 4, 2024
 
 - Fix stratum support
+- Fix build issue so RandomX is built natively to enable hardware acceleration
 - Add option --largepages, to enable large pages
 - Add option --no-affinity, to disable thread binding
 
