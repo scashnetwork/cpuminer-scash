@@ -155,6 +155,7 @@ static struct stratum_ctx stratum;
 // !RANDOMX
 randomx_flags rx_flags;
 bool want_largepages = false;
+bool want_affinity = true;
 pthread_mutex_t dataset_lock;
 pthread_barrier_t dataset_barrier;
 // !RANDOMX END
@@ -183,6 +184,7 @@ Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
                           randomx   RandomX (default)\n\
       --largepages      enable large pages\n\
+      --no-affinity     disable thread binding\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -234,6 +236,7 @@ static struct option const options[] = {
 	{ "algo", 1, NULL, 'a' },
 // !RANDOMX
 	{ "largepages", 0, NULL, 2000 },
+	{ "no-affinity", 0, NULL, 2001 },
 // !RANDOMX END
 #ifndef WIN32
 	{ "background", 0, NULL, 'B' },
@@ -1233,7 +1236,7 @@ static void *miner_thread(void *userdata)
 
 	/* Cpu affinity only makes sense if the number of threads is a multiple
 	 * of the number of CPUs */
-	if (num_processors > 1 && opt_n_threads % num_processors == 0) {
+	if (want_affinity && num_processors > 1 && opt_n_threads % num_processors == 0) {
 		if (!opt_quiet)
 			applog(LOG_INFO, "Binding thread %d to cpu %d",
 			       thr_id, thr_id % num_processors);
@@ -1965,6 +1968,9 @@ static void parse_arg(int key, char *arg, char *pname)
 	// !RANDOMX
 	case 2000:
 		want_largepages = true;
+		break;
+	case 2001:
+		want_affinity = false;
 		break;
 	// !RANDOMX END
 	case 1001:
