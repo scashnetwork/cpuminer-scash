@@ -26,8 +26,7 @@ sudo apt install autoconf pkg-config g++ make libcurl4-openssl-dev
 git clone https://github.com/scash-project/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
-./nomacro.pl	# in case the assembler doesn't support macros
-./configure CFLAGS="-O3" # make sure -O3 is an O and not a zero!
+./configure
 make
 ```
 
@@ -82,8 +81,7 @@ In MSYS2 terminal:
 git clone https://github.com/scash-project/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
-./nomacro.pl
-LIBCURL="-lcurl.dll" ./configure CFLAGS="-O3"
+LIBCURL="-lcurl.dll" ./configure
 make
 ```
 
