@@ -1394,21 +1394,21 @@ static void *miner_thread(void *userdata)
 					unsigned long datasetItemCount = randomx_dataset_item_count();
 
 					// Init randomx dataset using multiple threads
-					pthread_t thread[opt_n_threads];
-					rx_init_dataset_thrargs_t targs[opt_n_threads];
+					pthread_t thread[num_processors];
+					rx_init_dataset_thrargs_t targs[num_processors];
 
-					unsigned long itemChunkSize = datasetItemCount / opt_n_threads;
+					unsigned long itemChunkSize = datasetItemCount / num_processors;
 
-					for (i = 0; i < opt_n_threads; i++) {
+					for (i = 0; i < num_processors; i++) {
 						targs[i].start = i * itemChunkSize;
-						if (i == opt_n_threads - 1) {
+						if (i == num_processors - 1) {
 							targs[i].count = datasetItemCount - targs[i].start; // final chunk may have different count
 						} else {
 							targs[i].count = itemChunkSize;
 						}
-						if (opt_debug) {
-							applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
-						}
+						// if (opt_debug) {
+						// 	applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						// }
 						int ret = pthread_create(&thread[i], NULL, &rx_init_dataset, &targs[i]);
 						if(ret != 0) {
 							printf("Create pthread error!\n");
@@ -1416,7 +1416,7 @@ static void *miner_thread(void *userdata)
 						}
 					}
 
-					for (i = 0; i < opt_n_threads; i++) {
+					for (i = 0; i < num_processors; i++) {
 						pthread_join(thread[i], NULL);
 					}
 
