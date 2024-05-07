@@ -4,6 +4,7 @@ Version 3.0.5 - May 4, 2024
 - Fix build issue so RandomX is built natively to enable hardware acceleration
 - Add option --largepages, to enable large pages
 - Add option --no-affinity, to disable thread binding
+- Initialize dataset using number of cpus, not number of mining threads.
 
 Version 3.0.4 - Apr 6, 2024
 
