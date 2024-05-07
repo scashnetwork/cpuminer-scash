@@ -153,6 +153,9 @@ struct work_restart *work_restart = NULL;
 static struct stratum_ctx stratum;
 
 // !RANDOMX
+randomx_flags rx_flags;
+bool want_largepages = false;
+bool want_affinity = true;
 pthread_mutex_t dataset_lock;
 pthread_barrier_t dataset_barrier;
 // !RANDOMX END
@@ -180,6 +183,8 @@ Usage: " PROGRAM_NAME " [OPTIONS]\n\
 Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
                           randomx   RandomX (default)\n\
+      --largepages      enable large pages\n\
+      --no-affinity     disable thread binding\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -229,6 +234,10 @@ static char const short_options[] =
 
 static struct option const options[] = {
 	{ "algo", 1, NULL, 'a' },
+// !RANDOMX
+	{ "largepages", 0, NULL, 2000 },
+	{ "no-affinity", 0, NULL, 2001 },
+// !RANDOMX END
 #ifndef WIN32
 	{ "background", 0, NULL, 'B' },
 #endif
@@ -1146,6 +1155,16 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 	for (i = 0; i < 8; i++)
 		work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 	work->data[17] = le32dec(sctx->job.ntime);
+
+	// !RandomX
+	char epochSeedString[40];
+	memset(epochSeedString, 0, sizeof(epochSeedString));
+	uint32_t curtime = be32dec(&work->data[17]);
+	uint32_t nEpoch = curtime/(7 * 24 * 60 * 60);
+	sprintf(epochSeedString, "Scash/RandomX/Epoch/%d", nEpoch);
+	sha256d(work->randomx_seed_hash, epochSeedString, strlen(epochSeedString));
+	// !RandomX END
+
 	work->data[18] = le32dec(sctx->job.nbits);
 	work->data[20] = 0x80000000;
 	work->data[31] = 0x00000280;
@@ -1159,10 +1178,7 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		free(xnonce2str);
 	}
 
-	if (opt_algo == ALGO_SCRYPT)
-		diff_to_target(work->target, sctx->job.diff / 65536.0);
-	else
-		diff_to_target(work->target, sctx->job.diff);
+	diff_to_target(work->target, sctx->job.diff / 65536.0);
 }
 
 // RandomX VM data structures shared by mining threads
@@ -1182,6 +1198,16 @@ void *rx_init_dataset(void *args) {
 	pthread_exit(NULL);
 }
 
+void print_largepages_error() {
+	applog(LOG_ERR, "Fatal RandomX error. Try without --largepages option or ensure system is configured correctly.");
+#ifdef WIN32
+	applog(LOG_ERR, "- To use large pages, please enable 'Lock Pages in Memory' policy and reboot. For more info: https://learn.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows");
+#else
+	applog(LOG_ERR, "- To use large pages, please run: sudo sysctl -w vm.nr_hugepages=1280");
+	applog(LOG_ERR, "- To make large pages permanent, please run: sudo bash -c \"echo vm.nr_hugepages=1280 >> /etc/sysctl.conf\"");
+	applog(LOG_ERR, "- To verify large pages, please run: grep Huge /proc/meminfo");
+#endif
+}
 
 static void *miner_thread(void *userdata)
 {
@@ -1207,7 +1233,7 @@ static void *miner_thread(void *userdata)
 
 	/* Cpu affinity only makes sense if the number of threads is a multiple
 	 * of the number of CPUs */
-	if (num_processors > 1 && opt_n_threads % num_processors == 0) {
+	if (want_affinity && num_processors > 1 && opt_n_threads % num_processors == 0) {
 		if (!opt_quiet)
 			applog(LOG_INFO, "Binding thread %d to cpu %d",
 			       thr_id, thr_id % num_processors);
@@ -1327,9 +1353,6 @@ static void *miner_thread(void *userdata)
 					randomx_destroy_vm(rx_vm);
 				rx_vm = NULL;
 
-				randomx_flags flags = randomx_get_flags();
-				flags |= RANDOMX_FLAG_FULL_MEM;
-
 				// First thread to grab mutex gets to create the new dataset
  				pthread_mutex_lock(&dataset_lock);
 
@@ -1351,34 +1374,38 @@ static void *miner_thread(void *userdata)
 						free(s);
 					}
 
-					rx_cache = randomx_alloc_cache(flags);
+					rx_cache = randomx_alloc_cache(rx_flags);
 					if (!rx_cache) {
 						applog(LOG_ERR, "randomx_alloc_cache() failed, exiting mining thread %d", mythr->id);
-						goto out;
+						if (want_largepages) print_largepages_error();
+						exit(1);
 					}
 					randomx_init_cache(rx_cache, rx_current_key, 32);
 
-					rx_dataset = randomx_alloc_dataset(flags);
+					rx_dataset = randomx_alloc_dataset(rx_flags);
 					if (!rx_dataset) {
 						applog(LOG_ERR, "randomx_alloc_dataset() failed, exiting mining thread %d", mythr->id);
-						goto out;
+						if (want_largepages) print_largepages_error();
+						exit(1);
 					}
 					unsigned long datasetItemCount = randomx_dataset_item_count();
 
 					// Init randomx dataset using multiple threads
-					pthread_t thread[opt_n_threads];
-					rx_init_dataset_thrargs_t targs[opt_n_threads];
+					pthread_t thread[num_processors];
+					rx_init_dataset_thrargs_t targs[num_processors];
 
-					unsigned long itemChunkSize = datasetItemCount / opt_n_threads;
+					unsigned long itemChunkSize = datasetItemCount / num_processors;
 
-					for (i = 0; i < opt_n_threads; i++) {
+					for (i = 0; i < num_processors; i++) {
 						targs[i].start = i * itemChunkSize;
-						if (i == opt_n_threads - 1) {
+						if (i == num_processors - 1) {
 							targs[i].count = datasetItemCount - targs[i].start; // final chunk may have different count
 						} else {
 							targs[i].count = itemChunkSize;
 						}
-						applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						// if (opt_debug) {
+						// 	applog(LOG_DEBUG, "DEBUG: thread %d: init dataset [%lu - %lu]", i, targs[i].start, targs[i].start + targs[i].count - 1);
+						// }
 						int ret = pthread_create(&thread[i], NULL, &rx_init_dataset, &targs[i]);
 						if(ret != 0) {
 							printf("Create pthread error!\n");
@@ -1386,20 +1413,24 @@ static void *miner_thread(void *userdata)
 						}
 					}
 
-					for (i = 0; i < opt_n_threads; i++) {
+					for (i = 0; i < num_processors; i++) {
 						pthread_join(thread[i], NULL);
 					}
-					applog(LOG_DEBUG, "DEBUG: randomx_dataset initialized");
+
+					if (opt_debug) {
+						applog(LOG_DEBUG, "DEBUG: randomx_dataset initialized");
+					}
 
 					randomx_release_cache(rx_cache);
 					rx_cache = NULL;
 				}
 				pthread_mutex_unlock(&dataset_lock);
 
-				rx_vm  = randomx_create_vm(flags, NULL, rx_dataset);
+				rx_vm  = randomx_create_vm(rx_flags, NULL, rx_dataset);
 				if (!rx_vm) {
 					applog(LOG_ERR, "randomx_create_vm() failed, exiting mining thread %d", mythr->id);
-					goto out;
+					if (want_largepages) print_largepages_error();
+					exit(1);
 				}
 			}
 		}
@@ -1931,6 +1962,14 @@ static void parse_arg(int key, char *arg, char *pname)
 		free(opt_proxy);
 		opt_proxy = strdup(arg);
 		break;
+	// !RANDOMX
+	case 2000:
+		want_largepages = true;
+		break;
+	case 2001:
+		want_affinity = false;
+		break;
+	// !RANDOMX END
 	case 1001:
 		free(opt_cert);
 		opt_cert = strdup(arg);
@@ -2059,6 +2098,58 @@ static void signal_handler(int sig)
 }
 #endif
 
+// !RANDOMX
+void init_randomx_flags() {
+	randomx_flags flags = randomx_get_flags();
+	flags |= RANDOMX_FLAG_FULL_MEM;		// Mining mode, we must enable this.
+
+	if (want_largepages) {
+		flags |= RANDOMX_FLAG_LARGE_PAGES;
+	}
+
+	applog(LOG_INFO, "RandomX flags");
+	if (flags & RANDOMX_FLAG_ARGON2_AVX2) {
+		applog(LOG_INFO, " - Argon2 implementation: AVX2");
+	}
+	else if (flags & RANDOMX_FLAG_ARGON2_SSSE3) {
+		applog(LOG_INFO, " - Argon2 implementation: SSSE3");
+	}
+	else {
+		applog(LOG_INFO, " - Argon2 implementation: reference");
+	}
+
+	if (flags & RANDOMX_FLAG_FULL_MEM) {
+		applog(LOG_INFO, " - full memory mode (2080 MiB)");
+	}
+	else {
+		applog(LOG_INFO, " - light memory mode (256 MiB)");
+		exit(1); // This should never happen, error with flags if in light mode!
+	}
+
+	if (flags & RANDOMX_FLAG_JIT) {
+		applog(LOG_INFO, " - JIT compiled mode %s", (flags & RANDOMX_FLAG_SECURE) ? "(secure)" : "");
+	}
+	else {
+		applog(LOG_INFO, " - interpreted mode");
+	}
+
+	if (flags & RANDOMX_FLAG_HARD_AES) {
+		applog(LOG_INFO, " - hardware AES mode");
+	}
+	else {
+		applog(LOG_INFO, " - software AES mode");
+	}
+
+	if (flags & RANDOMX_FLAG_LARGE_PAGES) {
+		applog(LOG_INFO, " - large pages mode");
+	}
+	else {
+		applog(LOG_INFO, " - small pages mode");
+	}
+
+	rx_flags = flags;
+}
+// !RANDOMX
 
 
 int main(int argc, char *argv[])
@@ -2139,6 +2230,8 @@ int main(int argc, char *argv[])
 		opt_n_threads = num_processors;
 
 	// !RANDOMX
+	// Initialize RandomX flags
+	if (ALGO_RANDOMX == opt_algo) init_randomx_flags();
 	// Initialization of pthread_barrier with N threads
 	if (pthread_barrier_init(&dataset_barrier, NULL, opt_n_threads) != 0) {
 		printf("pthread_barrier_init failed!\n");
