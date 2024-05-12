@@ -23,7 +23,6 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  RandomX/src/argon2_core.c \
 		  RandomX/src/argon2_ref.c \
 		  RandomX/src/argon2_ssse3.c \
-		  RandomX/src/assembly_generator_x86.cpp \
 		  RandomX/src/blake2/blake2b.c \
 		  RandomX/src/blake2_generator.cpp \
 		  RandomX/src/bytecode_machine.cpp \
@@ -31,8 +30,6 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  RandomX/src/dataset.cpp \
 		  RandomX/src/instruction.cpp \
 		  RandomX/src/instructions_portable.cpp \
-		  RandomX/src/jit_compiler_x86.cpp \
-		  RandomX/src/jit_compiler_x86_static.S \
 		  RandomX/src/randomx.cpp \
 		  RandomX/src/reciprocal.c \
 		  RandomX/src/soft_aes.cpp \
@@ -46,6 +43,17 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  
 # Build RandomX natively to enable hardware acceleration
 RANDOMX_FLAGS=-march=native -O3
+
+if ARCH_x86_64
+minerd_SOURCES += RandomX/src/assembly_generator_x86.cpp
+minerd_SOURCES += RandomX/src/jit_compiler_x86.cpp RandomX/src/jit_compiler_x86_static.S
+endif
+
+if ARCH_AARCH64
+minerd_SOURCES += RandomX/src/jit_compiler_a64.cpp RandomX/src/jit_compiler_a64_static.S
+minerd_SOURCES += sha2-arm.S scrypt-arm.S
+RANDOMX_FLAGS += -D__aarch64__
+endif
 
 if USE_ASM
 if ARCH_x86
