@@ -2,6 +2,7 @@ Version 3.0.6 - May 12, 2024
 
 - Add dockerfile to generate Linux static binary
 - Add instructions for native Windows build
+- Add aarch64 build
 
 Version 3.0.5 - May 7, 2024
 
