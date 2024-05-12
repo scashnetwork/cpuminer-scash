@@ -30,6 +30,18 @@ cd cpuminer-scash
 make
 ```
 
+### Build static binary
+
+Run the script `build-linux-static.sh` which uses Docker to build a static binary for Linux in the `out` folder.
+```
+./build-linux-static.sh
+out/minerd --version
+```
+
+The steps to create a static binary with Alpine Linux and musl are outlined in the `build-linux-static.dockerfile`, with mbedtls used as the libcurl SSL backend.
+
+Using glibc to create a static binary is not recommended: https://stackoverflow.com/questions/57476533/why-is-statically-linking-glibc-discouraged/57478728#57478728
+
 ### Running the miner
 
 Help message and options:
@@ -59,7 +71,7 @@ Benchmark 20000 hashes, on each of 4 miner threads (by default, will try number 
 
 ## Windows
 
-To create a native Windows build using MSYS2
+MSYS2 is required to create a native Windows executable.
 
 ### Install MSYS2
 
@@ -74,7 +86,9 @@ In MSYS2 terminal:
 pacman -S git autoconf pkgconf automake make mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-gcc
 ```
 
-### Build instructions
+### Build instructions for running in MSYS2
+
+To build a native Windows application which must run in a MSYS2 terminal.
 
 In MSYS2 terminal:
 ```
@@ -82,6 +96,32 @@ git clone https://github.com/scash-project/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
 LIBCURL="-lcurl.dll" ./configure
+make
+```
+
+### Build instructions for running in Windows
+
+To build a native Windows application which can run in Terminal and PowerShell.
+
+In MSYS2 terminal:
+
+Build a static version of libcurl which uses Windows SSL (Schannel) instead of OpenSSL.
+```
+wget https://curl.se/download/curl-8.7.1.tar.gz
+tar xf curl-8.7.1.tar.gz
+cd curl-8_7_1
+autoreconf -fi
+./configure --with-schannel --disable-shared --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-mqtt --disable-manual --disable-docs --disable-ntlm --disable-largefile --without-libidn2 --disable-tls-srp --disable-libcurl-option --disable-alt-svc --disable-headers-api --disable-verbose --disable-ares --disable-aws --disable-netrc --without-brotli --without-nghttp2 --without-libpsl --without-zstd
+make
+make install
+```
+
+Now build the miner using this new static version of libcurl.
+```
+git clone https://github.com/scash-project/cpuminer-scash --recursive
+cd cpuminer-scash
+./autogen.sh
+LIBCURL=`pkg-config --static --libs libcurl` LDFLAGS="-static -static-libgcc" ./configure CFLAGS="-DCURL_STATICLIB"
 make
 ```
 
