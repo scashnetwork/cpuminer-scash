@@ -107,9 +107,10 @@ In MSYS2 terminal:
 
 Build a static version of libcurl which uses Windows SSL (Schannel) instead of OpenSSL.
 ```
+pacman -S libtool
 wget https://curl.se/download/curl-8.7.1.tar.gz
 tar xf curl-8.7.1.tar.gz
-cd curl-8_7_1
+cd curl-8.7.1
 autoreconf -fi
 ./configure --with-schannel --disable-shared --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-mqtt --disable-manual --disable-docs --disable-ntlm --disable-largefile --without-libidn2 --disable-tls-srp --disable-libcurl-option --disable-alt-svc --disable-headers-api --disable-verbose --disable-ares --disable-aws --disable-netrc --without-brotli --without-nghttp2 --without-libpsl --without-zstd
 make
