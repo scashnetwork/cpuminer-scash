@@ -156,6 +156,7 @@ static struct stratum_ctx stratum;
 randomx_flags rx_flags;
 bool want_largepages = false;
 bool want_affinity = true;
+static int opt_nonces = 1000;
 pthread_mutex_t dataset_lock;
 pthread_barrier_t dataset_barrier;
 // !RANDOMX END
@@ -218,6 +219,7 @@ Options:\n\
 #endif
 "\
       --benchmark       run in offline benchmark mode\n\
+      --nonces=N        run N nonces in benchmark (default: 1000)\n\
   -c, --config=FILE     load a JSON-format configuration file\n\
   -V, --version         display version information and exit\n\
   -h, --help            display this help text and exit\n\
@@ -237,6 +239,7 @@ static struct option const options[] = {
 // !RANDOMX
 	{ "largepages", 0, NULL, 2000 },
 	{ "no-affinity", 0, NULL, 2001 },
+	{ "nonces", 1000, NULL, 2002 },
 // !RANDOMX END
 #ifndef WIN32
 	{ "background", 0, NULL, 'B' },
@@ -1314,7 +1317,7 @@ static void *miner_thread(void *userdata)
 
 		// Number of RandomX hashes to benchmark
 		if (opt_benchmark && ALGO_RANDOMX==opt_algo) {
-			max64 = 1000;
+			max64 = opt_nonces;
 		}
 
 		if (work.data[19] + max64 > end_nonce)
@@ -1979,6 +1982,12 @@ static void parse_arg(int key, char *arg, char *pname)
 		break;
 	case 2001:
 		want_affinity = false;
+		break;
+	case 2002:
+		v = atoi(arg);
+		if (v < 1 || v > 9999999)	/* sanity check */
+			show_usage_and_exit(1);
+		opt_nonces = v;
 		break;
 	// !RANDOMX END
 	case 1001:
