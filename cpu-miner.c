@@ -156,6 +156,7 @@ static struct stratum_ctx stratum;
 randomx_flags rx_flags;
 bool want_largepages = false;
 bool want_affinity = true;
+bool want_softaes = false;
 static int opt_nonces = 1000;
 pthread_mutex_t dataset_lock;
 pthread_barrier_t dataset_barrier;
@@ -185,6 +186,7 @@ Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
                           randomx   RandomX (default)\n\
       --largepages      enable large pages\n\
+      --softaes         disable hardware AES\n\
       --no-affinity     disable thread binding\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
@@ -240,6 +242,7 @@ static struct option const options[] = {
 	{ "largepages", 0, NULL, 2000 },
 	{ "no-affinity", 0, NULL, 2001 },
 	{ "nonces", 1000, NULL, 2002 },
+	{ "softaes", 0, NULL, 2003 },
 // !RANDOMX END
 #ifndef WIN32
 	{ "background", 0, NULL, 'B' },
@@ -1431,6 +1434,12 @@ static void *miner_thread(void *userdata)
 
 				rx_vm  = randomx_create_vm(rx_flags, NULL, rx_dataset);
 				if (!rx_vm) {
+					// Most CPUs have AES hardware acceleration, so option is enabled by default.
+					// This check also helps catch builds with misconfigured compiler flags.
+					if ((rx_flags & RANDOMX_FLAG_HARD_AES)) {
+						applog(LOG_ERR, "Fatal RandomX error. Try using --softaes option.");
+						exit(1);
+					}
 					applog(LOG_ERR, "randomx_create_vm() failed, exiting mining thread %d", mythr->id);
 					if (want_largepages) print_largepages_error();
 					exit(1);
@@ -1505,10 +1514,10 @@ out:
 		static bool fCleanup = false;
  		pthread_mutex_lock(&dataset_lock);
 		if (!fCleanup) {
-		if (rx_dataset) randomx_release_dataset(rx_dataset);
-		if (rx_cache) randomx_release_cache(rx_cache);
-		rx_dataset = NULL;
-		rx_cache = NULL;
+			if (rx_dataset) randomx_release_dataset(rx_dataset);
+			if (rx_cache) randomx_release_cache(rx_cache);
+			rx_dataset = NULL;
+			rx_cache = NULL;
 
 			tq_push(thr_info[work_thr_id].q, NULL); // Terminate workio thread
 			fCleanup = true;
@@ -1989,6 +1998,9 @@ static void parse_arg(int key, char *arg, char *pname)
 			show_usage_and_exit(1);
 		opt_nonces = v;
 		break;
+	case 2003:
+		want_softaes = true;
+		break;
 	// !RANDOMX END
 	case 1001:
 		free(opt_cert);
@@ -2125,6 +2137,12 @@ void init_randomx_flags() {
 
 	if (want_largepages) {
 		flags |= RANDOMX_FLAG_LARGE_PAGES;
+	}
+
+	if (want_softaes) {
+		flags &= ~RANDOMX_FLAG_HARD_AES; // clear if automatic detection sets flag
+	} else{
+		flags |= RANDOMX_FLAG_HARD_AES; // enable by default
 	}
 
 	applog(LOG_INFO, "RandomX flags");
