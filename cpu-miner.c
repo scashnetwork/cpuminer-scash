@@ -1314,7 +1314,7 @@ static void *miner_thread(void *userdata)
 
 		// Number of RandomX hashes to benchmark
 		if (opt_benchmark && ALGO_RANDOMX==opt_algo) {
-			max64 = 20000;
+			max64 = 1000;
 		}
 
 		if (work.data[19] + max64 > end_nonce)
@@ -1484,6 +1484,8 @@ static void *miner_thread(void *userdata)
 			}
 		}
 
+		if (opt_benchmark) break;
+
 		/* if nonce found, submit work */
 		if (rc && !opt_benchmark && !submit_work(mythr, &work))
 			break;
@@ -1494,12 +1496,21 @@ out:
 
 	if (ALGO_RANDOMX == opt_algo)
 	{
-		if (rx_vm)
-			randomx_destroy_vm(rx_vm);
-		if (rx_dataset)
-			randomx_release_dataset(rx_dataset);
-		if (rx_cache)
-			randomx_release_cache(rx_cache);
+		pthread_barrier_wait(&dataset_barrier);
+		if (rx_vm) randomx_destroy_vm(rx_vm);
+
+		static bool fCleanup = false;
+ 		pthread_mutex_lock(&dataset_lock);
+		if (!fCleanup) {
+		if (rx_dataset) randomx_release_dataset(rx_dataset);
+		if (rx_cache) randomx_release_cache(rx_cache);
+		rx_dataset = NULL;
+		rx_cache = NULL;
+
+			tq_push(thr_info[work_thr_id].q, NULL); // Terminate workio thread
+			fCleanup = true;
+		}
+ 		pthread_mutex_unlock(&dataset_lock);
 	}
 
 	return NULL;
