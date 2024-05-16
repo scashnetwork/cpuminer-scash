@@ -39,6 +39,11 @@
 #include "compat.h"
 #include "miner.h"
 
+#ifdef __APPLE__
+#include "pthread_barrier.h"
+#endif
+
+
 #include "RandomX/src/randomx.h"
 
 #define PROGRAM_NAME		"minerd"

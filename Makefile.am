@@ -17,6 +17,7 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  cpu-miner.c util.c \
 		  sha2.c scrypt.c \
 		  randomx-miner.c \
+		  pthread_barrier.c \
 		  RandomX/src/aes_hash.cpp \
 		  RandomX/src/allocator.cpp \
 		  RandomX/src/argon2_avx2.c \
@@ -41,18 +42,23 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  RandomX/src/vm_interpreted.cpp \
 		  RandomX/src/vm_interpreted_light.cpp
 		  
-# Build RandomX natively to enable hardware acceleration
-RANDOMX_FLAGS=-march=native -O3
+# Compiler flags from: https://github.com/tevador/RandomX/blob/master/CMakeLists.txt
+RANDOMX_FLAGS = -O3
 
 if ARCH_x86_64
-minerd_SOURCES += RandomX/src/assembly_generator_x86.cpp
-minerd_SOURCES += RandomX/src/jit_compiler_x86.cpp RandomX/src/jit_compiler_x86_static.S
+minerd_SOURCES += RandomX/src/assembly_generator_x86.cpp RandomX/src/jit_compiler_x86.cpp RandomX/src/jit_compiler_x86_static.S
+RANDOMX_FLAGS += -maes -mavx2 -mssse3
 endif
 
 if ARCH_AARCH64
 minerd_SOURCES += RandomX/src/jit_compiler_a64.cpp RandomX/src/jit_compiler_a64_static.S
 minerd_SOURCES += sha2-arm.S scrypt-arm.S
+RANDOMX_FLAGS += -march=armv8-a+crypto
+if HAVE_APPLE
+RANDOMX_FLAGS += -D__APPLE__
+else
 RANDOMX_FLAGS += -D__aarch64__
+endif
 endif
 
 if USE_ASM
@@ -69,8 +75,8 @@ if ARCH_PPC
 minerd_SOURCES += sha2-ppc.S scrypt-ppc.S
 endif
 endif
+
 minerd_LDFLAGS	= $(PTHREAD_FLAGS)
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
-minerd_CFLAGS	= -fno-strict-aliasing
+minerd_CFLAGS	= -fno-strict-aliasing $(RANDOMX_FLAGS)
 minerd_CPPFLAGS	= @LIBCURL_CPPFLAGS@ $(JANSSON_INCLUDES) $(PTHREAD_FLAGS) $(RANDOMX_FLAGS)
-
