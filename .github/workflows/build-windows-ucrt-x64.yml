@@ -1,0 +1,104 @@
+name: 'Build Windows'
+on:
+  workflow_call:
+    inputs:
+      release-name:
+        description: 'Tag passed from the caller workflow'
+        default: ${{ github.sha }}
+        required: false
+        type: string
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 'Build in MSYS2'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      BASE_ROOT_DIR: ${{ github.workspace }}
+      TARGET_ARCH: windows-ucrt-x64
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git autoconf pkgconf automake make mingw-w64-ucrt-x86_64-curl libtool
+          # mingw-w64-ucrt-x86_64-gcc=13.2.0 , package not available in repo but can manually download in archive
+          # to workaround recent issue
+          # https://github.com/curl/curl/issues/13579
+          # https://repo.msys2.org/mingw/ucrt64/
+          # https://stackoverflow.com/questions/33969803/how-to-obtain-older-versions-of-packages-using-msys2
+
+      - name: Setup variables
+        run: |
+          RELEASE_NAME=${{ inputs.release-name }}
+          if [[ -z "$RELEASE_NAME" ]]; then
+            RELEASE_NAME=${{ github.sha }}
+          fi
+          RELEASE_NAME=${RELEASE_NAME#v}
+          echo "RELEASE_FOLDER=cpuminer-scash-$RELEASE_NAME-$TARGET_ARCH" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - name: Cache building curl
+        id: cache-depends-packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            "$BASE_ROOT_DIR\mycurl"
+          key: ${{ runner.os }}-mycurl-${{ hashFiles('./build-linux-static.dockerfile') }}
+
+      - name: Build curl
+        run: |
+          mkdir mycurl
+          wget https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-libs-13.2.0-6-any.pkg.tar.zst
+          wget https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-13.2.0-6-any.pkg.tar.zst
+          pacman -U --noconfirm mingw-w64-ucrt-x86_64-gcc-libs-13.2.0-6-any.pkg.tar.zst mingw-w64-ucrt-x86_64-gcc-13.2.0-6-any.pkg.tar.zst
+          wget https://curl.se/download/curl-8.7.1.tar.gz
+          tar xf curl-8.7.1.tar.gz
+          cd curl-8.7.1
+          autoreconf -fi
+          ./configure --with-schannel --disable-shared --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-mqtt --disable-manual --disable-docs --disable-ntlm --disable-largefile --without-libidn2 --disable-tls-srp --disable-libcurl-option --disable-alt-svc --disable-headers-api --disable-verbose --disable-ares --disable-aws --disable-netrc --without-brotli --without-nghttp2 --without-libpsl --without-zstd
+          make -j `nproc`
+          make install
+  
+      - name: Build project
+        run: |
+          cd "${{ github.workspace }}"
+          ./autogen.sh
+          LIBCURL=`pkg-config --static --libs libcurl` LDFLAGS="-static -static-libgcc" ./configure CFLAGS="-DCURL_STATICLIB"
+          make -j `nproc`
+          strip -s minerd.exe
+
+      - name: Test benchmarking
+        run: |
+          ./minerd.exe --version
+          ./minerd.exe --benchmark
+
+      - name: Package artifact
+        run: |
+          mkdir $RELEASE_FOLDER
+          cp -a minerd.exe $RELEASE_FOLDER
+          cd $RELEASE_FOLDER && sha256sum * >SHA256SUMS && cd ..
+          ARTIFACT_FILENAME=$RELEASE_FOLDER.tgz
+          tar -czvf $ARTIFACT_FILENAME $RELEASE_FOLDER
+          echo "ARTIFACT_FILENAME=$ARTIFACT_FILENAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_FILENAME }}
+          path: ${{ env.ARTIFACT_FILENAME }}
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Cancel parallel jobs
+        if: failure()
+        uses: andymckay/cancel-action@0.4

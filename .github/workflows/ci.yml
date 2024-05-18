@@ -1,0 +1,70 @@
+name: 'Build (and Publish for tagged release)'
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux x64
+    uses: ./.github/workflows/build-linux-static-x64.yml
+    with:
+      release-name: ${{ github.ref_name }}
+  arm64:
+    name: Linux arm64
+    uses: ./.github/workflows/build-linux-static-arm64.yml
+    with:
+      release-name: ${{ github.ref_name }}
+  mac:
+    name: macOS arm64
+    uses: ./.github/workflows/build-macos-14-arm64.yml
+    with:
+      release-name: ${{ github.ref_name }}
+  windows:
+    name: Windows x64
+    uses: ./.github/workflows/build-windows-ucrt-x64.yml
+    with:
+      release-name: ${{ github.ref_name }}
+
+
+  publish_release:
+    name: Publish Release
+    needs: [linux, mac, windows, arm64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: releases
+      
+      - name: Create checksums
+        run: |
+          cd releases
+          sha256sum * >SHA256SUMS
+          export RELEASE_SHA256SUMS=$(<SHA256SUMS)
+          cd ..
+          envsubst <github-release-notes-template.md >release-notes.md
+
+      - name: Publish release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.event.repository.name }} ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          draft: true
+          body_path: release-notes.md
+          files: |
+            releases/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

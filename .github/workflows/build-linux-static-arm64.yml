@@ -1,0 +1,97 @@
+name: Build Linux arm64
+on:
+  workflow_call:
+    inputs:
+      release-name:
+        description: 'Tag passed from the caller workflow'
+        default: ${{ github.sha }}
+        required: false
+        type: string
+  workflow_dispatch:
+      
+jobs:
+  build:
+    name: 'Build in QEMU container running Alpine Linux'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      BASE_ROOT_DIR: ${{ github.workspace }}
+      TARGET_ARCH: linux-static-arm64
+
+    steps:
+      - name: Setup variables
+        run: |
+          RELEASE_NAME=${{ inputs.release-name }}
+          if [[ -z "$RELEASE_NAME" ]]; then
+            RELEASE_NAME=${{ github.sha }}
+          fi
+          RELEASE_NAME=${RELEASE_NAME#v}
+          echo "RELEASE_FOLDER=cpuminer-scash-$RELEASE_NAME-$TARGET_ARCH" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - name: Setup QEMU with Alpine Linux for aarch64
+        uses: jirutka/setup-alpine@v1
+        with:
+          arch: aarch64
+
+      - name: Setup Alpine (root)
+        run: |
+          apk update && apk add binutils cmake make libstdc++ libgcc musl-dev gcc g++ pkgconfig autoconf automake libtool git mbedtls-dev mbedtls-static curl-dev curl-static zlib-static file
+          cat /etc/alpine-release
+          apk add nodejs npm
+        shell: alpine.sh --root {0}
+
+      - name: Build curl (root)
+        run: |
+          mkdir /tmp/mycurl
+          wget -c https://curl.se/download/curl-8.7.1.tar.gz -O - | tar -xz -C /tmp
+          cd /tmp/curl-8.7.1
+          autoreconf -fi
+          ./configure --with-mbedtls --disable-shared --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-mqtt --disable-manual --disable-docs --disable-ntlm --disable-largefile --without-libidn2 --disable-tls-srp --disable-libcurl-option --disable-alt-svc --disable-headers-api --disable-verbose --disable-ares --disable-aws --disable-netrc --without-brotli --without-nghttp2
+          make -j `nproc` install
+        shell: alpine.sh --root {0}
+
+      - name: Build miner
+        run: |
+          ./autogen.sh
+          LDFLAGS="-static -static-libgcc" ./configure
+          make -j `nproc`
+          strip -s minerd
+        shell: alpine.sh {0}
+
+      - name: Verify static build
+        run: |
+          file minerd | grep -q "statically linked"
+
+      - name: Test benchmarking
+        run: |
+          ./minerd --version
+          ./minerd --benchmark
+        shell: alpine.sh {0}
+
+      - name: Package artifact
+        run: |
+          mkdir $RELEASE_FOLDER
+          cp -a minerd $RELEASE_FOLDER
+          cd $RELEASE_FOLDER && sha256sum * >SHA256SUMS && cd ..
+          # sha256sum $RELEASE_FOLDER/* >$RELEASE_FOLDER/SHA256SUMS
+          ARTIFACT_FILENAME=$RELEASE_FOLDER.tgz
+          tar -czvf $ARTIFACT_FILENAME $RELEASE_FOLDER
+          echo "ARTIFACT_FILENAME=$ARTIFACT_FILENAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_FILENAME }}
+          path: ${{ env.ARTIFACT_FILENAME }}
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Cancel parallel jobs
+        if: failure()
+        uses: andymckay/cancel-action@0.4
