@@ -109,14 +109,10 @@ struct workio_cmd {
 };
 
 enum algos {
-	ALGO_SCRYPT,		/* scrypt(1024,1,1) */
-	ALGO_SHA256D,		/* SHA-256d */
 	ALGO_RANDOMX,		/* RandomX */
 };
 
 static const char *algo_names[] = {
-	[ALGO_SCRYPT]		= "scrypt",
-	[ALGO_SHA256D]		= "sha256d",
 	[ALGO_RANDOMX]		= "randomx",
 };
 
@@ -138,7 +134,6 @@ static int opt_fail_pause = 30;
 int opt_timeout = 0;
 static int opt_scantime = 5;
 static enum algos opt_algo = ALGO_RANDOMX;
-static int opt_scrypt_n = 1024;
 static int opt_n_threads;
 static int num_processors;
 static char *rpc_url;
@@ -1250,15 +1245,6 @@ static void *miner_thread(void *userdata)
 			       thr_id, thr_id % num_processors);
 		affine_to_cpu(thr_id, thr_id % num_processors);
 	}
-	
-	if (opt_algo == ALGO_SCRYPT) {
-		scratchbuf = scrypt_buffer_alloc(opt_scrypt_n);
-		if (!scratchbuf) {
-			applog(LOG_ERR, "scrypt buffer allocation failed");
-			pthread_mutex_lock(&applog_lock);
-			exit(1);
-		}
-	}
 
 	while (1) {
 		unsigned long hashes_done;
@@ -1311,12 +1297,6 @@ static void *miner_thread(void *userdata)
 		max64 *= thr_hashrates[thr_id];
 		if (max64 <= 0) {
 			switch (opt_algo) {
-			case ALGO_SCRYPT:
-				max64 = opt_scrypt_n < 16 ? 0x3ffff : 0x3fffff / opt_scrypt_n;
-				break;
-			case ALGO_SHA256D:
-				max64 = 0x1fffff;
-				break;
 			case ALGO_RANDOMX:
 				max64 = 0x1fffff;
 				break;
@@ -1456,16 +1436,6 @@ static void *miner_thread(void *userdata)
 
 		/* scan nonces for a proof-of-work hash */
 		switch (opt_algo) {
-		case ALGO_SCRYPT:
-			rc = scanhash_scrypt(thr_id, work.data, scratchbuf, work.target,
-			                     max_nonce, &hashes_done, opt_scrypt_n);
-			break;
-
-		case ALGO_SHA256D:
-			rc = scanhash_sha256d(thr_id, work.data, work.target,
-			                      max_nonce, &hashes_done);
-			break;
-
 		case ALGO_RANDOMX:
 			rc = scanhash_randomx(thr_id, work.data, work.target,
 			                      max_nonce, rx_vm, &hashes_done, work.rx_hash);
@@ -1820,15 +1790,6 @@ static void parse_arg(int key, char *arg, char *pname)
 			if (!strncmp(arg, algo_names[i], v)) {
 				if (arg[v] == '\0') {
 					opt_algo = i;
-					break;
-				}
-				if (arg[v] == ':' && i == ALGO_SCRYPT) {
-					char *ep;
-					v = strtol(arg+v+1, &ep, 10);
-					if (*ep || v & (v-1) || v < 2)
-						continue;
-					opt_algo = i;
-					opt_scrypt_n = v;
 					break;
 				}
 			}

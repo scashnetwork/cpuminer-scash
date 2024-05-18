@@ -159,11 +159,6 @@ extern int scanhash_sha256d(int thr_id, uint32_t *pdata,
 extern int scanhash_randomx(int thr_id, uint32_t *pdata,
 	const uint32_t *ptarget, uint32_t max_nonce, randomx_vm *vm, unsigned long *hashes_done, uint8_t *out_hash);
 
-extern unsigned char *scrypt_buffer_alloc(int N);
-extern int scanhash_scrypt(int thr_id, uint32_t *pdata,
-	unsigned char *scratchbuf, const uint32_t *ptarget,
-	uint32_t max_nonce, unsigned long *hashes_done, int N);
-
 struct thr_info {
 	int		id;
 	pthread_t	pth;

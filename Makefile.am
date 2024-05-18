@@ -11,11 +11,9 @@ SUBDIRS		= compat
 
 bin_PROGRAMS	= minerd
 
-dist_man_MANS	= minerd.1
-
 minerd_SOURCES	= elist.h miner.h compat.h \
 		  cpu-miner.c util.c \
-		  sha2.c scrypt.c \
+		  sha2.c \
 		  randomx-miner.c \
 		  pthread_barrier.c \
 		  RandomX/src/aes_hash.cpp \
@@ -52,7 +50,7 @@ endif
 
 if ARCH_AARCH64
 minerd_SOURCES += RandomX/src/jit_compiler_a64.cpp RandomX/src/jit_compiler_a64_static.S
-minerd_SOURCES += sha2-arm.S scrypt-arm.S
+minerd_SOURCES += sha2-arm.S
 RANDOMX_FLAGS += -march=armv8-a+crypto
 if HAVE_APPLE
 RANDOMX_FLAGS += -D__APPLE__
@@ -63,16 +61,16 @@ endif
 
 if USE_ASM
 if ARCH_x86
-minerd_SOURCES += sha2-x86.S scrypt-x86.S
+minerd_SOURCES += sha2-x86.S
 endif
 if ARCH_x86_64
-minerd_SOURCES += sha2-x64.S scrypt-x64.S
+minerd_SOURCES += sha2-x64.S
 endif
 if ARCH_ARM
-minerd_SOURCES += sha2-arm.S scrypt-arm.S
+minerd_SOURCES += sha2-arm.S
 endif
 if ARCH_PPC
-minerd_SOURCES += sha2-ppc.S scrypt-ppc.S
+minerd_SOURCES += sha2-ppc.S
 endif
 endif
 
