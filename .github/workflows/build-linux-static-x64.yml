@@ -28,6 +28,7 @@ jobs:
           fi
           RELEASE_NAME=${RELEASE_NAME#v}
           echo "RELEASE_FOLDER=cpuminer-scash-$RELEASE_NAME-$TARGET_ARCH" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,6 +60,26 @@ jobs:
           echo "ARTIFACT_FILENAME=$ARTIFACT_FILENAME" >> "$GITHUB_ENV"
 
       - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_FILENAME }}
+          path: ${{ env.ARTIFACT_FILENAME }}
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Package Hiveon artifact
+        run: |
+          cp -r hiveon cpuminer_scash
+          cp -a minerd cpuminer_scash/cpuminer_scash_bin
+          cd cpuminer_scash
+          envsubst <h-manifest-template.conf >h-manifest.conf
+          rm h-manifest-template.conf
+          cd ..
+          ARTIFACT_FILENAME=cpuminer_scash-${RELEASE_NAME}_hiveon.tar.gz
+          tar -czvf $ARTIFACT_FILENAME cpuminer_scash
+          echo "ARTIFACT_FILENAME=$ARTIFACT_FILENAME" >> "$GITHUB_ENV"
+
+      - name: Upload Hiveon artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_FILENAME }}
