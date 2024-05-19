@@ -1,3 +1,11 @@
+Version 3.0.7 - May 19, 2024
+
+- Add support for macOS 14 Sonoma
+- Add support for Hiveon OS
+- Add Github actions and workflow to build release binaries
+- Add option --softaes to disable hardware AES
+- Add option --nonces=N to set number of hashes to perform in benchmark
+
 Version 3.0.6 - May 12, 2024
 
 - Add dockerfile to generate Linux static binary
