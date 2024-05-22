@@ -9,6 +9,9 @@ AC_CONFIG_HEADERS([cpuminer-config.h])
 dnl Make sure anyone changing configure.ac/Makefile.am has a clue
 AM_MAINTAINER_MODE
 
+CFLAGS="-g -Ofast"
+CXXFLAGS="-g -Ofast"
+
 dnl Checks for programs
 AC_PROG_CC
 AM_PROG_CC_C_O
