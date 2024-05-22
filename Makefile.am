@@ -40,8 +40,13 @@ minerd_SOURCES	= elist.h miner.h compat.h \
 		  RandomX/src/vm_interpreted.cpp \
 		  RandomX/src/vm_interpreted_light.cpp
 		  
-# Compiler flags from: https://github.com/tevador/RandomX/blob/master/CMakeLists.txt
-RANDOMX_FLAGS = -O3
+# Compiler flags from:
+# https://github.com/tevador/RandomX/blob/master/CMakeLists.txt
+# https://github.com/xmrig/xmrig/blob/master/cmake/flags.cmake
+RANDOMX_FLAGS = -Ofast
+
+# Enabled for gcc, explicitly enable for clang
+RANDOMX_FLAGS += -funroll-loops -fmerge-all-constants
 
 if ARCH_x86_64
 minerd_SOURCES += RandomX/src/assembly_generator_x86.cpp RandomX/src/jit_compiler_x86.cpp RandomX/src/jit_compiler_x86_static.S
@@ -51,7 +56,7 @@ endif
 if ARCH_AARCH64
 minerd_SOURCES += RandomX/src/jit_compiler_a64.cpp RandomX/src/jit_compiler_a64_static.S
 minerd_SOURCES += sha2-arm.S
-RANDOMX_FLAGS += -march=armv8-a+crypto
+RANDOMX_FLAGS += -march=armv8-a+crypto -flax-vector-conversions
 if HAVE_APPLE
 RANDOMX_FLAGS += -D__APPLE__
 else
@@ -77,4 +82,4 @@ endif
 minerd_LDFLAGS	= $(PTHREAD_FLAGS)
 minerd_LDADD	= @LIBCURL@ @JANSSON_LIBS@ @PTHREAD_LIBS@ @WS2_LIBS@
 minerd_CFLAGS	= -fno-strict-aliasing $(RANDOMX_FLAGS)
-minerd_CPPFLAGS	= @LIBCURL_CPPFLAGS@ $(JANSSON_INCLUDES) $(PTHREAD_FLAGS) $(RANDOMX_FLAGS)
+minerd_CPPFLAGS	= @LIBCURL_CPPFLAGS@ $(JANSSON_INCLUDES) $(PTHREAD_FLAGS) $(RANDOMX_FLAGS) -s
