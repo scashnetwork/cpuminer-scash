@@ -157,6 +157,7 @@ randomx_flags rx_flags;
 bool want_largepages = false;
 bool want_affinity = true;
 bool want_softaes = false;
+bool want_batchmode = true;
 static int opt_nonces = 1000;
 pthread_mutex_t dataset_lock;
 pthread_barrier_t dataset_barrier;
@@ -187,6 +188,7 @@ Options:\n\
                           randomx   RandomX (default)\n\
       --largepages      enable large pages\n\
       --softaes         disable hardware AES\n\
+      --no-batch        disable batch mode\n\
       --no-affinity     disable thread binding\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
@@ -243,6 +245,7 @@ static struct option const options[] = {
 	{ "no-affinity", 0, NULL, 2001 },
 	{ "nonces", 1000, NULL, 2002 },
 	{ "softaes", 0, NULL, 2003 },
+	{ "no-batch", 0, NULL, 2004 },
 // !RANDOMX END
 #ifndef WIN32
 	{ "background", 0, NULL, 'B' },
@@ -1437,8 +1440,11 @@ static void *miner_thread(void *userdata)
 		/* scan nonces for a proof-of-work hash */
 		switch (opt_algo) {
 		case ALGO_RANDOMX:
-			rc = scanhash_randomx(thr_id, work.data, work.target,
-			                      max_nonce, rx_vm, &hashes_done, work.rx_hash);
+			if (want_batchmode) {
+				rc = scanhash_randomx_batch(thr_id, work.data, work.target, max_nonce, rx_vm, &hashes_done, work.rx_hash);
+			} else {
+				rc = scanhash_randomx(thr_id, work.data, work.target, max_nonce, rx_vm, &hashes_done, work.rx_hash);
+			}
 			break;
 
 		default:
@@ -1966,6 +1972,9 @@ static void parse_arg(int key, char *arg, char *pname)
 		break;
 	case 2003:
 		want_softaes = true;
+		break;
+	case 2004:
+		want_batchmode = false;
 		break;
 	// !RANDOMX END
 	case 1001:
