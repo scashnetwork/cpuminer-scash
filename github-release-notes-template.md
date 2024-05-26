@@ -6,6 +6,7 @@ Users are advised to build from source. Binaries are provided only for convenien
 - Windows (x64)
   - Supports Windows 10 or later.
 - MacOS (arm64)
+  - Supports macOS 14 Sonoma.
   - Users may need to run the command `xattr -r -d com.apple.quarantine minerd` to launch the binary.
 
 ## Verify checksums
