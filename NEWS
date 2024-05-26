@@ -1,3 +1,8 @@
+Version 3.0.8 - May 26, 2024
+
+- Add option --no-batch to disable batch mode
+- Fix compile flags for better optimization
+
 Version 3.0.7 - May 19, 2024
 
 - Add support for macOS 14 Sonoma
