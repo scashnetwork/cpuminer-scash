@@ -151,6 +151,7 @@ int longpoll_thr_id = -1;
 int stratum_thr_id = -1;
 struct work_restart *work_restart = NULL;
 static struct stratum_ctx stratum;
+static int opt_stratum_timeout = 120;
 
 // !RANDOMX
 randomx_flags rx_flags;
@@ -210,6 +211,7 @@ Options:\n\
       --no-gbt          disable getblocktemplate support\n\
       --no-stratum      disable X-Stratum support\n\
       --no-redirect     ignore requests to change the URL of the mining server\n\
+      --stratum-timeout=N  set the stratum timeout in seconds (default: 120)\n\
   -q, --quiet           disable per-thread hashmeter output\n\
   -D, --debug           enable debug output\n\
   -P, --protocol-dump   verbose dump of protocol-level activities\n"
@@ -269,6 +271,7 @@ static struct option const options[] = {
 	{ "retries", 1, NULL, 'r' },
 	{ "retry-pause", 1, NULL, 'R' },
 	{ "scantime", 1, NULL, 's' },
+	{ "stratum-timeout", 1, NULL, 1031 },
 #ifdef HAVE_SYSLOG_H
 	{ "syslog", 0, NULL, 'S' },
 #endif
@@ -1695,8 +1698,8 @@ static void *stratum_thread(void *userdata)
 			}
 		}
 		
-		if (!stratum_socket_full(&stratum, 120)) {
-			applog(LOG_ERR, "Stratum connection timed out");
+		if (!stratum_socket_full(&stratum, opt_stratum_timeout)) {
+			applog(LOG_ERR, "Stratum connection timed out after %d seconds", opt_stratum_timeout);
 			s = NULL;
 		} else
 			s = stratum_recv_line(&stratum);
@@ -2016,6 +2019,12 @@ static void parse_arg(int key, char *arg, char *pname)
 			show_usage_and_exit(1);
 		}
 		strcpy(coinbase_sig, arg);
+		break;
+	case 1031:  		/* --stratum-timeout */
+		v = atoi(arg);
+		if (v < 1 || v > 99999)	/* sanity check */
+			show_usage_and_exit(1);
+		opt_stratum_timeout = v;
 		break;
 	case 'S':
 		use_syslog = true;

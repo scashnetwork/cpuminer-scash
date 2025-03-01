@@ -1,3 +1,7 @@
+Version 3.0.9 - March 1, 2025
+
+- Add option --stratum-timeout to set the stratum timeout in seconds
+
 Version 3.0.8 - May 26, 2024
 
 - Add option --no-batch to disable batch mode
