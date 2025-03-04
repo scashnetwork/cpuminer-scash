@@ -145,6 +145,7 @@ static char coinbase_sig[101] = "";
 char *opt_cert;
 char *opt_proxy;
 long opt_proxy_type;
+bool opt_no_ssl_verification = false;
 struct thr_info *thr_info;
 static int work_thr_id;
 int longpoll_thr_id = -1;
@@ -209,6 +210,7 @@ Options:\n\
       --no-longpoll     disable long polling support\n\
       --no-getwork      disable getwork support\n\
       --no-gbt          disable getblocktemplate support\n\
+      --no-ssl-verification  disable SSL certificate authority and hostname verification\n\
       --no-stratum      disable X-Stratum support\n\
       --no-redirect     ignore requests to change the URL of the mining server\n\
       --stratum-timeout=N  set the stratum timeout in seconds (default: 120)\n\
@@ -263,6 +265,7 @@ static struct option const options[] = {
 	{ "no-getwork", 0, NULL, 1010 },
 	{ "no-longpoll", 0, NULL, 1003 },
 	{ "no-redirect", 0, NULL, 1009 },
+	{ "no-ssl-verification", 0, NULL, 1032 },
 	{ "no-stratum", 0, NULL, 1007 },
 	{ "pass", 1, NULL, 'p' },
 	{ "protocol-dump", 0, NULL, 'P' },
@@ -2025,6 +2028,9 @@ static void parse_arg(int key, char *arg, char *pname)
 		if (v < 1 || v > 99999)	/* sanity check */
 			show_usage_and_exit(1);
 		opt_stratum_timeout = v;
+		break;
+	case 1032:  		/* --no-ssl-verification */
+		opt_no_ssl_verification = true;
 		break;
 	case 'S':
 		use_syslog = true;
