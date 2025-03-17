@@ -27,6 +27,7 @@ jobs:
             RELEASE_NAME=${{ github.sha }}
           fi
           RELEASE_NAME=${RELEASE_NAME#v}
+          RELEASE_NAME=${RELEASE_NAME//\//-}  # Replace slashes with hyphens
           echo "RELEASE_FOLDER=cpuminer-scash-$RELEASE_NAME-$TARGET_ARCH" >> "$GITHUB_ENV"
           echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
 
