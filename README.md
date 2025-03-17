@@ -4,7 +4,7 @@ Cpuminer-scash is a free, high performance, open source, cross platform CPU mine
 
 Cpuminer-scash has been tested on Linux, Windows, macOS and on Intel/AMD x86-64 and ARM64 processors.
 
-Scash uses RandomX 1.2.1 as it's mining algorithm, as specified here: https://github.com/scash-project/sips/blob/main/scash-protocol-spec.md
+Scash uses RandomX 1.2.1 as it's mining algorithm, as specified here: https://github.com/scashnetwork/sips/blob/main/scash-protocol-spec.md
 
 ## Features
 
@@ -14,7 +14,7 @@ Cpuminer supports:
 - Hiveon OS
 
 ## Download
-- Binary releases: https://github.com/scash-project/cpuminer-scash/releases
+- Binary releases: https://github.com/scashnetwork/cpuminer-scash/releases
 - Build from source (recommended)
 
 ## Hiveon OS instructions
@@ -33,7 +33,7 @@ Create a new flight sheet, select 'Custom miner', click 'Setup miner config' and
 Cpuminer depends on the following libraries:
 - libcurl, https://curl.se/libcurl/
 - jansson, https://github.com/akheron/jansson (jansson is included locally)
-- RandomX, https://github.com/scash-project/RandomX (RandomX is included as a Git submodule)
+- RandomX, https://github.com/scashnetwork/RandomX (RandomX is included as a Git submodule)
 
 ## Linux
 
@@ -48,7 +48,7 @@ sudo apt install autoconf pkg-config g++ make libcurl4-openssl-dev
 
 ### Build instructions
 ```
-git clone https://github.com/scash-project/cpuminer-scash --recursive
+git clone https://github.com/scashnetwork/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
 ./configure
@@ -117,7 +117,7 @@ To build a native Windows application which must run in a MSYS2 terminal.
 
 In MSYS2 terminal:
 ```
-git clone https://github.com/scash-project/cpuminer-scash --recursive
+git clone https://github.com/scashnetwork/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
 LIBCURL="-lcurl.dll" ./configure
@@ -144,7 +144,7 @@ make install
 
 Now build the miner using this new static version of libcurl.
 ```
-git clone https://github.com/scash-project/cpuminer-scash --recursive
+git clone https://github.com/scashnetwork/cpuminer-scash --recursive
 cd cpuminer-scash
 ./autogen.sh
 LIBCURL=`pkg-config --static --libs libcurl` LDFLAGS="-static -static-libgcc" ./configure CFLAGS="-DCURL_STATICLIB"
