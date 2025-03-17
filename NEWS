@@ -1,4 +1,4 @@
-Version 3.0.9 - March 3, 2025
+Version 3.0.9 - March 16, 2025
 
 - Add option --stratum-timeout to set the stratum timeout in seconds
 - Add option --no-ssl-verification to disable SSL certificate and hostname verification
